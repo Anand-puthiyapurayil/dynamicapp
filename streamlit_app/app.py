@@ -14,10 +14,20 @@ if uploaded_file:
     df = pd.read_csv(uploaded_file)
     st.write("Data Preview:", df.head())
     
+    # Initialize session state for features and target columns if they don't exist
+    if "feature_columns" not in st.session_state:
+        st.session_state["feature_columns"] = []
+    if "target_column" not in st.session_state:
+        st.session_state["target_column"] = None
+
     # Step 2: Select Feature Columns and Target Column
-    feature_columns = st.multiselect("Select feature columns", df.columns.tolist())
+    feature_columns = st.multiselect("Select feature columns", df.columns.tolist(), default=st.session_state["feature_columns"])
     target_column = st.selectbox("Select target column", [col for col in df.columns if col not in feature_columns])
-    
+
+    # Update session state to retain selections
+    st.session_state["feature_columns"] = feature_columns
+    st.session_state["target_column"] = target_column
+
     # Step 3: Data Cleaning
     df.replace([np.inf, -np.inf], np.nan, inplace=True)
     df.fillna(0, inplace=True)
@@ -34,7 +44,7 @@ if uploaded_file:
                 st.success("Data preprocessed successfully")
                 preprocessed_data = pd.DataFrame(response.json()["preprocessed_data"])
 
-                # Store preprocessed data in session state to retain it
+                # Store preprocessed data in session state
                 st.session_state["preprocessed_data"] = preprocessed_data
                 
                 # Display preprocessed data
@@ -71,18 +81,21 @@ if uploaded_file:
                     result = response.json()
                     st.success("Model(s) trained successfully")
 
-                    # Display metrics for each model
+                    # Display metrics for each model using .get() to handle missing keys gracefully
                     st.write("### Model Metrics")
                     for model_name, metrics in result["model_metrics"].items():
                         st.write(f"**{model_name}**")
-                        st.write(f"Mean Squared Error (MSE): {metrics['mse']}")
-                        st.write(f"R² Score: {metrics['r2']}")
+                        st.write(f"Train Mean Squared Error (MSE): {metrics.get('train_mse', 'N/A')}")
+                        st.write(f"Train R² Score: {metrics.get('train_r2', 'N/A')}")
+                        st.write(f"Test Mean Squared Error (MSE): {metrics.get('test_mse', 'N/A')}")
+                        st.write(f"Test R² Score: {metrics.get('test_r2', 'N/A')}")
+                        st.write(f"Sample Predictions: {metrics.get('sample_predictions', [])}")
 
                     # Display best model information
                     st.write("### Best Model Summary")
                     st.write(f"**Best Model:** {result['best_model_name']}")
-                    st.write(f"Mean Squared Error (MSE): {result['best_model_mse']}")
-                    st.write(f"R² Score: {result['best_model_r2']}")
+                    st.write(f"Best Model Test MSE: {result['best_model_metrics'].get('test_mse', 'N/A')}")
+                    st.write(f"Best Model Test R² Score: {result['best_model_metrics'].get('test_r2', 'N/A')}")
 
                     # Store available model names for prediction selection
                     st.session_state["model_names"] = list(result["model_metrics"].keys())
@@ -105,7 +118,7 @@ if uploaded_file:
             input_df = pd.DataFrame([input_data])
             payload = {
                 "input_data": input_df.to_dict(orient="records"),
-                "model_name": selected_model  # Specify model name for prediction
+                "model_name": selected_model
             }
 
             try:
